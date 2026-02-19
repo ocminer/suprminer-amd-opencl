@@ -1,31 +1,39 @@
-# suprminer-amd
+# suprminer-amd-opencl
 
 A multi-threaded, multi-pool OpenCL GPU miner for cryptocurrency mining.
 
-**Repository:** https://github.com/ocminer/suprminer-amd
+**Repository:** https://github.com/ocminer/suprminer-amd-opencl
 
-**Bug Tracker:** https://github.com/ocminer/suprminer-amd/issues
+**Bug Tracker:** https://github.com/ocminer/suprminer-amd-opencl/issues
 
 **License:** GPLv3 (see `COPYING`)
 
 
-## What's New in v1.2.0
+## What's New
 
-- Builds cleanly on Ubuntu 22.04/24.04 with GCC 12/13 (zero warnings)
-- OpenCL 2.0+ / 3.0 compatible (tested with NVIDIA and AMD ICDs)
-- OpenCL kernels compile on OpenCL 2.0+ platforms (automatic `-cl-std=CL1.2` fallback)
-- Updated Jansson to v2.15.0
-- Modernized libcurl API usage (no deprecated functions)
-- Security fixes: buffer overflow prevention, integer overflow fix, undefined behavior removal
-- Fixed working difficulty ramp-up (set to pool difficulty immediately)
-- GitHub Actions CI pipeline
+### v1.4.0
 
-See [CHANGELOG.md](CHANGELOG.md) for full details.
+- **Verthash (VTC)** algorithm with optimized 4-way coalesced kernel (449 kH/s on RX 7600 XT)
+- **XEL (XelisHash v3)** algorithm with HBM2 kernel variant for MI50/MI60/VII/MI100/MI200/MI300
+- **QHash** algorithm (Qubitcoin PoW)
+- HiveOS and MMPOS integration scripts
+- HTTP stats API (`--api` flag, port 4068)
+- sysfs GPU monitoring (temperature, fan, clocks)
+- ADL removed (sysfs only)
 
 
 ## Supported Algorithms
 
 Use `-k <name>` or `--algorithm <name>` to select an algorithm.
+
+### New Algorithms
+
+| Algorithm (`-k`) | Coin | Notes |
+|-------------------|------|-------|
+| `verthash` | Vertcoin (VTC) | Requires `verthash.dat` (see below). Aliases: `vtc` |
+| `xel` | Xelis (XEL) | Auto-detects HBM2 GPUs. Aliases: `xelis`, `xelishashv3` |
+| `qhash` | Qubitcoin (Q2C) | Aliases: `qtc`, `qubitcoin-pow` |
+| `neoscrypt` | Feathercoin, Phoenixcoin, etc. | Optimized for AMD RDNA |
 
 ### Scrypt Variants
 
@@ -40,11 +48,10 @@ Use `-k <name>` or `--algorithm <name>` to select an algorithm.
 
 | Algorithm (`-k`) | Description |
 |-------------------|-------------|
-| `neoscrypt` | NeoScrypt (Feathercoin, etc.) |
 | `pluck` | Pluck (Supcoin) |
 | `yescrypt` | Yescrypt (GlobalBoost-Y) |
 | `yescrypt-multi` | Yescrypt multi-threaded variant |
-| `cryptonight` | CryptoNight (CryptoNote coins; use `--monero` for Monero variants) |
+| `cryptonight` | CryptoNight (CryptoNote coins) |
 
 ### SHA/Keccak/Blake Family
 
@@ -102,7 +109,7 @@ Use `-k <name>` or `--algorithm <name>` to select an algorithm.
 | Algorithm (`-k`) | Description |
 |-------------------|-------------|
 | `lyra2re` | Lyra2RE v1 |
-| `lyra2rev2` | Lyra2RE v2 (Vertcoin) |
+| `lyra2rev2` | Lyra2RE v2 |
 
 ### Other
 
@@ -120,9 +127,24 @@ Use `-k <name>` or `--algorithm <name>` to select an algorithm.
 
 ### Quick Start
 
-Single pool:
+NeoScrypt (Feathercoin/Phoenixcoin):
 ```bash
-./suprminer-amd -o stratum+tcp://pool:port -u wallet_address -p x -k groestlcoin
+./suprminer-amd -k neoscrypt -o stratum+tcp://pool:port -u wallet -p x
+```
+
+Verthash (Vertcoin):
+```bash
+./suprminer-amd -k verthash -o stratum+tcp://pool:port -u wallet -p x --verthash-dat /path/to/verthash.dat
+```
+
+XEL (Xelis):
+```bash
+./suprminer-amd -k xel -o stratum+tcp://pool:port -u wallet -p x
+```
+
+QHash (Qubitcoin):
+```bash
+./suprminer-amd -k qhash -o stratum+tcp://pool:port -u wallet -p x
 ```
 
 Multiple pools (failover):
@@ -130,14 +152,50 @@ Multiple pools (failover):
 ./suprminer-amd \
   -o stratum+tcp://pool1:port -u wallet1 -p x \
   -o stratum+tcp://pool2:port -u wallet2 -p x \
-  -k groestlcoin
+  -k neoscrypt
+```
+
+### Verthash Data File
+
+Verthash mining requires a 1.2 GB data file (`verthash.dat`). This file is static and identical for all miners -- you only need to create or download it once.
+
+**Option 1: Download (recommended)**
+
+Download a pre-generated `verthash.dat` from:
+- https://vtc.suprnova.cc/verthash.dat
+- Or use the [Vertcoin One-Click Miner](https://vertcoin.io/download-one-click-miner/) which generates it automatically
+
+**Option 2: Generate with VerthashMiner**
+
+```bash
+./VerthashMiner --gen-verthash-data verthash.dat
+```
+
+Generation takes about 3 minutes on a modern CPU.
+
+**Specifying the path:**
+
+By default, the miner looks for `verthash.dat` in the current working directory. Use `--verthash-dat` to specify a different path:
+
+```bash
+./suprminer-amd -k verthash -o stratum+tcp://pool:port -u wallet -p x --verthash-dat /home/user/verthash.dat
+```
+
+The file is loaded into GPU memory at startup (requires ~1.2 GB VRAM in addition to normal usage).
+
+### XEL HBM2 GPUs
+
+For AMD HBM2 GPUs (Vega, MI50, MI60, Radeon VII, MI100, MI200, MI300), an optimized kernel variant is auto-detected. To force it manually:
+
+```bash
+./suprminer-amd -k xel --xel-hbm2 -o stratum+tcp://pool:port -u wallet -p x
 ```
 
 ### Configuration File
 
 Save your configuration:
 ```bash
-./suprminer-amd -o stratum+tcp://pool:port -u wallet -p x -k groestlcoin -S settings.conf
+./suprminer-amd -o stratum+tcp://pool:port -u wallet -p x -k neoscrypt -S settings.conf
 ```
 
 Run from saved config:
@@ -147,14 +205,7 @@ Run from saved config:
 
 Default config file: `suprminer-amd.conf` in the current directory.
 
-Configuration files can include other files:
-```json
-{
-    "include": "other-config.conf"
-}
-```
-
-### Pool Configuration
+### Pool Configuration (JSON)
 
 ```json
 {
@@ -163,16 +214,25 @@ Configuration files can include other files:
             "url": "stratum+tcp://pool1:port",
             "user": "wallet1",
             "pass": "x"
-        },
-        {
-            "quota": "2;stratum+tcp://pool2:port",
-            "user": "wallet2",
-            "pass": "x"
         }
     ],
-    "algorithm": "groestlcoin",
-    "intensity": "15"
+    "algorithm": "verthash",
+    "verthash-dat": "/path/to/verthash.dat",
+    "intensity": "17"
 }
+```
+
+### Stats API
+
+Enable the HTTP stats API for monitoring:
+
+```bash
+./suprminer-amd --api [options]
+```
+
+Returns JSON on port 4068 (configurable with `--api-port`):
+```bash
+curl http://localhost:4068/
 ```
 
 ### Pool Strategies
@@ -192,36 +252,6 @@ Configuration files can include other files:
 | `S` | Settings |
 | `D` | Display options |
 | `Q` | Quit |
-
-### Logging
-
-Redirect stderr for logging:
-```bash
-./suprminer-amd [options] 2>mining.log
-```
-
-Share logging:
-```bash
-./suprminer-amd --sharelog shares.csv [options]
-```
-
-
-## Documentation
-
-Additional documentation in `doc/`:
-
-| File | Topic |
-|------|-------|
-| `API.md` | RPC API specification |
-| `configuration.md` | Configuration options reference |
-| `FAQ.md` | Frequently asked questions |
-| `GPU.md` | GPU configuration and tuning |
-| `kernel.md` | OpenCL kernel development |
-| `MINING.md` | Mining optimization guide |
-| `BUGS.md` | Known bugs and workarounds |
-| `coding.md` | Coding style and contributing |
-| `windows-build.txt` | Windows build instructions |
-| `cygwin-build.txt` | Cygwin build instructions |
 
 
 ## Proxy Support
@@ -249,8 +279,3 @@ ST: 1  SS: 0  NB: 1  LW: 8  GF: 1  RF: 1
 | LW | Locally generated work items |
 | GF | Getwork fail occasions |
 | RF | Remote fail occasions |
-
-
-## History
-
-The v1.2.0 release modernizes the codebase for current compilers (GCC 12/13), current OpenCL implementations (2.0+/3.0), and current dependencies (libcurl 8.x, Jansson 2.15).
