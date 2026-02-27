@@ -11,6 +11,10 @@ A multi-threaded, multi-pool OpenCL GPU miner for cryptocurrency mining.
 
 ## What's New
 
+### v1.5.0
+
+- **Decred (BLAKE3)** algorithm with (9 GH/s on RX 7600 XT) 
+
 ### v1.4.0
 
 - **Verthash (VTC)** algorithm with optimized 4-way coalesced kernel (449 kH/s on RX 7600 XT)
